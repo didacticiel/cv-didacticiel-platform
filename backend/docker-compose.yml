@@ -1,0 +1,29 @@
+# backend/docker-compose.yml
+version: '3.8'
+
+services:
+  # 1. SERVICE DE BASE DE DONNÉES POSTGRESQL
+  db:
+    image: postgres:16-alpine # Utilise une image légère et récente
+    container_name: cv_didacticiel_db
+    environment:
+      # Variables d'environnement pour PostgreSQL, correspondant à celles dans .env
+      POSTGRES_DB: ${DATABASE_NAME}
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+    restart: always
+
+  # 2. SERVICE REDIS (pour Celery et Cache)
+  redis:
+    image: redis:7-alpine
+    container_name: cv_didacticiel_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+volumes:
+  postgres_data:
