@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import environ
+from django.contrib import admin
+
 
 # Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -285,15 +287,30 @@ JWT_COOKIE_HTTPONLY = True
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
 
+# CORS settings pour React
+CORS_ALLOW_ALL_ORIGINS = True 
+
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
     CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
-        'http://localhost:3000', # Port classique pour React
-        'http://127.0.0.1:3000',
-    ])
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+])
 
 CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # MODIFIE POUR CV DIDACTICIEL: Documentation API
 SPECTACULAR_SETTINGS = {
@@ -420,5 +437,12 @@ if DEBUG:
     INSTALLED_APPS += ['debug_toolbar']
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware']
     INTERNAL_IPS = ['127.0.0.1']
+
+# --- Personnalisation de l'Admin Django ---
+ADMIN_SITE_TITLE = "API CvDidacticiel"
+ADMIN_SITE_HEADER = "Administration de l'API CvDidacticiel"
+ADMIN_SITE_INDEX_TITLE = "Tableau de Bord Administratif"
+
+
 
 # Fin de settings/base.py

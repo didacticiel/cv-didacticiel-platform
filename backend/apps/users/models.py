@@ -1,4 +1,3 @@
-# apps/users/models.py
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -21,18 +20,23 @@ class User(AbstractUser):
     # Remplacer le nom d'utilisateur par l'email pour l'authentification
     USERNAME_FIELD = "email"
     # Conserver 'username' dans les champs requis pour l'admin Django 
-    # (même si nous n'obligerons pas l'utilisateur à le remplir lors de l'inscription)
     REQUIRED_FIELDS = ["username"] 
 
     # --- Champs pour le Profil ---
     
-    # Nous conservons first_name et last_name pour le CV et l'identification
     first_name = models.CharField(_("Prénom"), max_length=150, blank=False, null=False)
     last_name = models.CharField(_("Nom"), max_length=150, blank=False, null=False)
     
-    # Champ de Monétisation (Bien que notre stratégie soit par CV, ce champ est utile pour un futur abonnement)
-    # Dans notre modèle actuel (Paiement Unique par CV), ce champ est moins critique, 
-    # mais le conserver rend le modèle scalable.
+    # Nouveau champ pour l'avatar/photo de profil
+    avatar = models.ImageField(
+        _("Avatar / Photo de profil"), 
+        upload_to='avatars/', 
+        null=True, 
+        blank=True,
+        help_text=_("Image de profil de l'utilisateur. Stockée dans le dossier 'avatars/'.")
+    )
+    
+    # Champ de Monétisation
     is_premium_subscriber = models.BooleanField(
         _("abonné premium"),
         default=False,
@@ -40,7 +44,6 @@ class User(AbstractUser):
     )
     
     # --- Champs par défaut (hérités) ---
-    # is_active, is_staff, is_superuser, date_joined sont hérités.
 
     class Meta:
         verbose_name = _('Utilisateur')

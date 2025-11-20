@@ -1,18 +1,16 @@
-# apps/users/views.py
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
 from django.utils.translation import gettext_lazy as _
 
 from .serializers import (
     UserRegisterSerializer, 
     UserDetailSerializer, 
-    LoginSerializer 
-    # Nous pourrions ajouter un sérialiseur pour l'avatar plus tard si nécessaire
+    LoginSerializer,
+    UserAvatarSerializer # Importé depuis le nouveau fichier serializers.py
 )
 
 User = get_user_model()
@@ -51,10 +49,6 @@ class UserRegisterView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED, 
         )
 
-# La vue de Login (TokenObtainPairView) et de Refresh (TokenRefreshView)
-# sont déjà gérées directement dans le fichier urls.py principal 
-# (backend/CvDidacticiel_API/urls.py) par simplejwt.
-
 # =========================================================================
 # 2. GESTION DU PROFIL (L'utilisateur connecté)
 # =========================================================================
@@ -87,7 +81,7 @@ class LogoutView(APIView):
 
     def post(self, request):
         try:
-            # Le Refresh Token est généralement envoyé dans le corps de la requête ou dans un cookie
+            # Le Refresh Token est envoyé dans le corps de la requête
             refresh_token = request.data["refresh"]
             token = RefreshToken(refresh_token)
             token.blacklist()
@@ -99,8 +93,7 @@ class LogoutView(APIView):
                 {"detail": _("Token de rafraîchissement invalide ou manquant.")}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
-  
-
+    
 # =========================================================================
 # 4. GESTION DES FICHIERS (Avatar)
 # =========================================================================
@@ -115,13 +108,10 @@ class AvatarUploadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
-        # Le sérialiseur d'avatar doit être importé.
-        # Assurez-vous d'avoir UserAvatarSerializer dans .serializers
-        from .serializers import UserAvatarSerializer 
         
         user = request.user
         
-        # Le fichier est généralement dans request.FILES pour MultiPartParser
+        # Le fichier est dans request.FILES pour MultiPartParser
         if 'avatar' not in request.FILES:
             return Response(
                 {"avatar": _("Veuillez fournir un fichier d'image.")}, 
@@ -138,6 +128,7 @@ class AvatarUploadView(APIView):
         if serializer.is_valid():
             serializer.save()
             # Retourne les données utilisateur mises à jour
-            return Response(UserDetailSerializer(user).data)  
+            # Utilise UserDetailSerializer pour obtenir l'URL complète de l'avatar
+            return Response(UserDetailSerializer(user).data) 
             
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -34,7 +34,8 @@ urlpatterns = [
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
     # --- LOGIQUE MÉTIER (Prochaine étape : CV App) ---
-    path('api/v1/cvs/', include('apps.cv_app.urls')), 
+    path('api/v1/', include('apps.cv_app.urls')), 
+    
     
     
     

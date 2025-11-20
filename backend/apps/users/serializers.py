@@ -1,115 +1,103 @@
-# apps/users/serializers.py
 from rest_framework import serializers
-from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core import exceptions as django_exceptions
 from django.utils.translation import gettext_lazy as _
 
 User = get_user_model()
 
-# ----------------------------
+# =========================================================================
 # 1. ENREGISTREMENT (REGISTER)
-# ----------------------------
+# =========================================================================
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    """
-    Sérieliseur pour l'enregistrement d'un nouvel utilisateur.
-    Utilise l'email comme identifiant principal.
-    """
+    """Sérialiseur pour la création d'un nouvel utilisateur."""
+    
+    # Champ write_only pour la sécurité lors de l'enregistrement
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     password2 = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
 
     class Meta:
         model = User
-        fields = ('id', 'email', 'first_name', 'last_name', 'password', 'password2')
+        fields = (
+            'email', 
+            'username', 
+            'first_name', 
+            'last_name', 
+            'password', 
+            'password2'
+        )
         extra_kwargs = {
+            'username': {'required': True},
             'first_name': {'required': True},
             'last_name': {'required': True},
-            'email': {'required': True},
         }
 
-    def validate(self, attrs):
-        """Vérifie l'unicité de l'email et la correspondance des mots de passe."""
-        if attrs['password'] != attrs['password2']:
-            raise serializers.ValidationError(_("Les deux mots de passe ne correspondent pas."))
-        
-        # Le modèle utilisateur est configuré pour utiliser l'email comme USERNAME_FIELD
-        if User.objects.filter(email=attrs['email']).exists():
-            raise serializers.ValidationError(_("Cette adresse email est déjà utilisée."))
+    def validate(self, data):
+        # Validation de la correspondance des mots de passe
+        if data['password'] != data['password2']:
+            raise serializers.ValidationError({"password2": _("Les mots de passe ne correspondent pas.")})
+
+        # Validation de la complexité du mot de passe
+        try:
+            validate_password(data['password'], user=User(**data))
+        except django_exceptions.ValidationError as e:
+            raise serializers.ValidationError({"password": list(e.messages)})
             
-        return attrs
+        return data
 
     def create(self, validated_data):
-        """Crée l'utilisateur et met à jour le champ username (facultatif) avec l'email."""
-        
-        # Nous utilisons l'email pour le champ 'username' car il est requis par AbstractUser
-        username = validated_data['email'] 
-        
+        validated_data.pop('password2')
+        # Création de l'utilisateur avec son mot de passe haché
         user = User.objects.create_user(
             email=validated_data['email'],
-            username=username, # On utilise l'email ici
+            username=validated_data['username'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
             password=validated_data['password']
         )
         return user
 
-# ----------------------------
-# 2. CONNEXION (LOGIN)
-# ----------------------------
+# =========================================================================
+# 2. CONNEXION (LOGIN - basé sur email/password)
+# =========================================================================
 
 class LoginSerializer(serializers.Serializer):
-    """
-    Sérieliseur personnalisé pour la connexion utilisant l'email (ou l'identifiant).
-    Ceci est une étape de validation avant l'obtention du token JWT.
-    """
-    # Nous utilisons 'email' car c'est notre USERNAME_FIELD
-    email = serializers.CharField() 
-    password = serializers.CharField(write_only=True)
+    """Sérialiseur pour la connexion (méthode non utilisée directement par JWT, mais utile)."""
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(required=True, write_only=True, style={'input_type': 'password'})
 
-    def validate(self, data):
-        email = data.get('email')
-        password = data.get('password')
-
-        if email and password:
-            # Tente d'authentifier l'utilisateur en utilisant l'email et le mot de passe
-            user = authenticate(request=self.context.get('request'), email=email, password=password)
-
-            if not user:
-                # Vérifie si l'utilisateur existe pour donner un message plus précis
-                try:
-                    User.objects.get(email__iexact=email)
-                except User.DoesNotExist:
-                    raise serializers.ValidationError(_("L'utilisateur avec cette adresse e-mail n'existe pas."))
-                
-                # Si l'utilisateur existe mais le mot de passe est faux
-                raise serializers.ValidationError(_("Mot de passe invalide."))
-            
-            if not user.is_active:
-                raise serializers.ValidationError(_("Ce compte est désactivé."))
-
-            # Ajoute l'objet user validé pour la vue (si la vue en a besoin)
-            data['user'] = user
-            return data
-        
-        raise serializers.ValidationError(_("Doit inclure l'e-mail et le mot de passe."))
-
-# ----------------------------
-# 3. DÉTAILS ET MISE À JOUR (ME)
-# ----------------------------
+# =========================================================================
+# 3. DÉTAILS DU PROFIL (GET/UPDATE /users/me/)
+# =========================================================================
 
 class UserDetailSerializer(serializers.ModelSerializer):
-    """
-    Sérieliseur pour la lecture et la mise à jour des informations de profil
-    de l'utilisateur connecté (/api/v1/users/me/).
-    """
+    """Sérialiseur pour la lecture et la mise à jour du profil utilisateur."""
+    
+    # Ajout du champ 'avatar' pour la lecture et la mise à jour
+    avatar_url = serializers.ImageField(source='avatar', read_only=True)
+    
     class Meta:
         model = User
         fields = (
-            'id', 'email', 'first_name', 'last_name', 
-            'is_premium_subscriber', # Notre champ de monétisation
-            'is_staff', 'date_joined'
+            'id', 
+            'email', 
+            'username', 
+            'first_name', 
+            'last_name', 
+            'is_premium_subscriber', 
+            'avatar_url', # Le chemin complet de l'image
+            'is_staff', 
+            'date_joined'
         )
-        read_only_fields = (
-            'id', 'email', 'is_premium_subscriber', # L'email et le statut premium ne sont pas modifiables ici
-            'is_staff', 'date_joined'
-        )
+        read_only_fields = ('id', 'email', 'is_premium_subscriber', 'is_staff', 'date_joined')
+        
+# =========================================================================
+# 4. TÉLÉCHARGEMENT D'AVATAR (PATCH /users/me/avatar/)
+# =========================================================================
+
+class UserAvatarSerializer(serializers.ModelSerializer):
+    """Sérialiseur pour la mise à jour du champ avatar uniquement."""
+    class Meta:
+        model = User
+        fields = ('avatar',)
