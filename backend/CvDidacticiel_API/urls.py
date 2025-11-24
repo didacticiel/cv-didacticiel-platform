@@ -2,47 +2,55 @@
 
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-    TokenBlacklistView,
-)
-# 👇👇 NOUVELLE IMPORTATION NÉCESSAIRE 👇👇
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-
 from django.conf import settings
+from django.conf.urls.static import static 
 
+# Importations pour DRF Spectacular
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView
+)
 
+# Importations pour dj-rest-auth/allauth (nous utiliserons le flux standard)
+from dj_rest_auth.registration.views import SocialAccountListView, SocialAccountDisconnectView
+from dj_rest_auth.views import LogoutView
+
+# Définition des chemins d'accès de l'API et de l'Admin
 
 urlpatterns = [
+    # --- ADMIN DJANGO ---
     path('admin/', admin.site.urls),
 
-    # --- AUTHENTIFICATION JWT ---
-    path('api/v1/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/v1/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/v1/auth/logout/', TokenBlacklistView.as_view(), name='token_blacklist'),
-
-    # --- GESTION DES UTILISATEURS ---
-    path('api/v1/users/', include('apps.users.urls')),
-
-    # --- DOCUMENTATION API (CORRIGÉ) ---
-    # 1. Schéma brut OpenAPI
-    path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),
-    # 2. Interface Swagger UI
+    # --- API SCHÉMA & DOC (DRF SPECTACULAR) ---
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'), 
-    # 3. Interface ReDoc (optionnel)
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     
-    # --- LOGIQUE MÉTIER (Prochaine étape : CV App) ---
-    path('api/v1/', include('apps.cv_app.urls')), 
+    # --- AUTHENTIFICATION CONSOLIDÉE (via dj-rest-auth & allauth) ---
     
+    # 🎯 CORRECTION: Tous les chemins d'authentification sont déplacés sous 'api/v1/'
+    # 1. Endpoints standards (Login, Logout, Password Change/Reset)
+    path('api/v1/auth/', include('dj_rest_auth.urls')),
     
+    # 2. Endpoints d'Inscription/Enregistrement
+    path('api/v1/auth/registration/', include('dj_rest_auth.registration.urls')),
     
+    # 3. Social Login (Google) - Nécessaire pour le callback allauth
+    path('api/v1/auth/', include('allauth.urls')),
     
+    # --- API LOCALE (Vos applications) ---
+    path('api/v1/users/', include('apps.users.urls', namespace='users')),
+    path('api/v1/cvs/', include('apps.cv_app.urls', namespace='cv_app')), 
 ]
 
-if settings.DEBUG: # N'ajoutez la Debug Toolbar qu'en mode DEBUG
+# Gestion des fichiers médias et statiques en développement, et Debug Toolbar
+if settings.DEBUG:
+    # 1. Debug Toolbar
     import debug_toolbar
     urlpatterns = [
-        path('__debug__/', include(debug_toolbar.urls)), # AJOUTEZ CETTE LIGNE
+        path('__debug__/', include(debug_toolbar.urls)),
     ] + urlpatterns
+    
+    # 2. Fichiers Médias
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

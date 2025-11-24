@@ -7,6 +7,8 @@ import { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { authService } from "@/services/api";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+
+// Importation des pages
 import Landing from "./pages/Landing";
 import Register from "./pages/Register";
 import Login from "./pages/Login";
@@ -17,6 +19,8 @@ import ExperienceStep from "./pages/onboarding/ExperienceStep";
 import EducationStep from "./pages/onboarding/EducationStep";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
+// 🎯 AJOUT : Importer la nouvelle page de callback pour l'authentification sociale
+import AuthCallback from "./pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -31,13 +35,15 @@ const AppContent = () => {
           const user = await authService.getCurrentUser();
           setUser(user);
         } catch (error) {
+          // Si le token est invalide, on le supprime et on déconnecte l'utilisateur
+          console.error("Failed to get current user:", error);
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           setUser(null);
         }
-      } else {
-        setIsLoading(false);
       }
+      // Dans tous les cas, on arrête le chargement initial
+      setIsLoading(false);
     };
 
     initAuth();
@@ -45,10 +51,17 @@ const AppContent = () => {
 
   return (
     <Routes>
+      {/* --- Pages publiques --- */}
       <Route path="/" element={<Landing />} />
       <Route path="/register" element={<Register />} />
       <Route path="/login" element={<Login />} />
       
+      {/* 🎯 AJOUT : Route pour le callback de l'authentification sociale */}
+      {/* Cette route doit être accessible sans authentification. 
+          Elle est utilisée par la popup de Google pour finaliser la connexion. */}
+      <Route path="/auth/social/callback" element={<AuthCallback />} />
+      
+      {/* --- Pages protégées (nécessitent une authentification) --- */}
       <Route path="/onboarding/document" element={
         <ProtectedRoute>
           <DocumentStep />
@@ -81,7 +94,7 @@ const AppContent = () => {
         </ProtectedRoute>
       } />
       
-      {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+      {/* --- Page 404 (catch-all) --- */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

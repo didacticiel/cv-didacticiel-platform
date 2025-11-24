@@ -1,3 +1,5 @@
+// src/pages/Login.tsx
+
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -12,6 +14,9 @@ import { authService } from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
 import { FileText, Loader2 } from 'lucide-react';
 import type { LoginCredentials } from '@/types/api.types';
+
+// 🎯 AJOUT : Import du composant de bouton Google
+import GoogleAuthButton from '@/components/GoogleAuthButton';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Email invalide' }),
@@ -34,13 +39,24 @@ const Login = () => {
     resolver: zodResolver(loginSchema),
   });
 
+  // 🎯 AJOUT : Fonction de callback pour le succès de l'authentification Google
+  // Cette fonction sera appelée par le composant GoogleAuthButton après une connexion réussie.
+  const handleGoogleSuccess = () => {
+    toast({
+      title: 'Connexion réussie !',
+      description: 'Bienvenue sur votre tableau de bord.',
+    });
+    // Redirige l'utilisateur vers le tableau de bord, comme pour une connexion classique.
+    navigate('/dashboard');
+  };
+
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
 
     try {
       await authService.login(data as LoginCredentials);
       
-      // Récupérer les informations utilisateur
+      // Récupérer les informations utilisateur pour les stocker dans le state global
       const user = await authService.getCurrentUser();
       setUser(user);
 
@@ -75,42 +91,20 @@ const Login = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {/* ... (vos champs de formulaire existants : Email, Mdp) ... */}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="jean.dupont@example.com"
-                {...register('email')}
-                disabled={isLoading}
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              )}
+              <Input id="email" type="email" placeholder="jean.dupont@example.com" {...register('email')} disabled={isLoading} />
+              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="password">Mot de passe</Label>
-              <Input
-                id="password"
-                type="password"
-                {...register('password')}
-                disabled={isLoading}
-              />
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              )}
+              <Input id="password" type="password" {...register('password')} disabled={isLoading} />
+              {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Connexion en cours...
-                </>
-              ) : (
-                'Se connecter'
-              )}
+              {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Connexion en cours...</>) : ('Se connecter')}
             </Button>
 
             <div className="text-center text-sm text-muted-foreground">
@@ -120,6 +114,29 @@ const Login = () => {
               </Link>
             </div>
           </form>
+
+          {/* 🎯 AJOUT : Séparateur visuel et bouton d'authentification Google */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Ou continuer avec
+                </span>
+              </div>
+            </div>
+            
+            <div className="mt-4">
+              {/* 
+                Le composant GoogleAuthButton gère toute la logique d'authentification OAuth.
+                - mode="login" : Affiche le texte "Se connecter avec Google".
+                - onSuccess={handleGoogleSuccess} : Définit la fonction à appeler une fois l'authentification réussie.
+              */}
+              <GoogleAuthButton mode="login" onSuccess={handleGoogleSuccess} />
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

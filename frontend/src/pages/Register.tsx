@@ -1,3 +1,5 @@
+// src/pages/Register.tsx
+
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -11,6 +13,9 @@ import { useToast } from '@/hooks/use-toast';
 import { authService } from '@/services/api';
 import { FileText, Loader2 } from 'lucide-react';
 import type { RegisterData } from '@/types/api.types';
+
+// 🎯 AJOUT : Import du composant de bouton Google
+import GoogleAuthButton from '@/components/GoogleAuthButton';
 
 // 1. Définition du Schéma de Validation (Zod)
 // Zod est utilisé ici pour valider les données AVANT de les envoyer à l'API.
@@ -45,6 +50,17 @@ const Register = () => {
     resolver: zodResolver(registerSchema),
   });
 
+  // 🎯 AJOUT : Fonction de callback pour le succès de l'authentification Google
+  // Cette fonction sera appelée par le composant GoogleAuthButton après une connexion réussie.
+  const handleGoogleSuccess = () => {
+    toast({
+      title: 'Inscription réussie !',
+      description: 'Redirection automatique pour créer votre CV.',
+    });
+    // Redirige l'utilisateur vers le flux d'onboarding, comme pour une inscription classique.
+    navigate('/onboarding/document');
+  };
+
   // Fonction appelée à la soumission du formulaire, SI la validation Zod a réussi.
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true);
@@ -63,17 +79,15 @@ const Register = () => {
         };
 
         // 1. Appel de l'API pour l'inscription (POST /users/register/)
+        // Note: La réponse de register() contient déjà les tokens grâce à notre vue Django.
         await authService.register(apiData);
         
+        // 2. Récupérer les informations de l'utilisateur nouvellement créé
+        const user = await authService.getCurrentUser();
+
         toast({
             title: 'Inscription réussie !',
-            description: 'Redirection automatique pour créer votre CV.',
-        });
-
-        // 2. Auto-login après inscription réussie
-        await authService.login({
-            email: data.email,
-            password: data.password,
+            description: `Bienvenue ${user.first_name} !`,
         });
 
         // 3. Redirection vers la première étape de l'onboarding
@@ -96,7 +110,6 @@ const Register = () => {
   // Rendu du composant
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-subtle px-4 py-12">
-      {/* La Card est le conteneur visuel du formulaire */}
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
@@ -110,97 +123,69 @@ const Register = () => {
         <CardContent>
           {/* Le handleSubmit enveloppe onSubmit pour gérer la validation Zod */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Champ Prénom */}
+            {/* ... (vos champs de formulaire existants : Prénom, Nom, Email, Mdp, Confirmer Mdp) ... */}
+             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="first_name">Prénom</Label>
-                <Input
-                  id="first_name"
-                  placeholder="Jean"
-                  {...register('first_name')} // Lie l'input au hook-form
-                  disabled={isLoading}
-                />
-                {errors.first_name && (
-                  <p className="text-sm text-destructive">{errors.first_name.message}</p>
-                )}
+                <Input id="first_name" placeholder="Jean" {...register('first_name')} disabled={isLoading} />
+                {errors.first_name && <p className="text-sm text-destructive">{errors.first_name.message}</p>}
               </div>
-              {/* Champ Nom */}
               <div className="space-y-2">
                 <Label htmlFor="last_name">Nom</Label>
-                <Input
-                  id="last_name"
-                  placeholder="Dupont"
-                  {...register('last_name')}
-                  disabled={isLoading}
-                />
-                {errors.last_name && (
-                  <p className="text-sm text-destructive">{errors.last_name.message}</p>
-                )}
+                <Input id="last_name" placeholder="Dupont" {...register('last_name')} disabled={isLoading} />
+                {errors.last_name && <p className="text-sm text-destructive">{errors.last_name.message}</p>}
               </div>
             </div>
-
-            {/* Champ Email */}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="jean.dupont@example.com"
-                {...register('email')}
-                disabled={isLoading}
-              />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              )}
+              <Input id="email" type="email" placeholder="jean.dupont@example.com" {...register('email')} disabled={isLoading} />
+              {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
             </div>
-
-            {/* Champ Mot de passe */}
             <div className="space-y-2">
               <Label htmlFor="password">Mot de passe</Label>
-              <Input
-                id="password"
-                type="password"
-                {...register('password')}
-                disabled={isLoading}
-              />
-              {errors.password && (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              )}
+              <Input id="password" type="password" {...register('password')} disabled={isLoading} />
+              {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
             </div>
-
-            {/* Champ Confirmation du Mot de passe */}
             <div className="space-y-2">
               <Label htmlFor="password_confirm">Confirmer le mot de passe</Label>
-              <Input
-                id="password_confirm"
-                type="password"
-                {...register('password_confirm')}
-                disabled={isLoading}
-              />
-              {errors.password_confirm && (
-                <p className="text-sm text-destructive">{errors.password_confirm.message}</p>
-              )}
+              <Input id="password_confirm" type="password" {...register('password_confirm')} disabled={isLoading} />
+              {errors.password_confirm && <p className="text-sm text-destructive">{errors.password_confirm.message}</p>}
             </div>
 
-            {/* Bouton de Soumission */}
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Inscription en cours...
-                </>
-              ) : (
-                'S\'inscrire'
-              )}
+              {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Inscription en cours...</>) : ('S\'inscrire')}
             </Button>
-
-            <div className="text-center text-sm text-muted-foreground">
-              Vous avez déjà un compte ?{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
-                Se connecter
-              </Link>
-            </div>
           </form>
+          
+          {/* 🎯 AJOUT : Séparateur visuel et bouton d'authentification Google */}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Ou continuer avec
+                </span>
+              </div>
+            </div>
+            
+            <div className="mt-4">
+              {/* 
+                Le composant GoogleAuthButton gère toute la logique d'authentification OAuth.
+                - mode="register" : Affiche le texte "S'inscrire avec Google".
+                - onSuccess={handleGoogleSuccess} : Définit la fonction à appeler une fois l'authentification réussie.
+              */}
+              <GoogleAuthButton mode="register" onSuccess={handleGoogleSuccess} />
+            </div>
+          </div>
+          
+          <div className="text-center text-sm text-muted-foreground">
+            Vous avez déjà un compte ?{' '}
+            <Link to="/login" className="font-medium text-primary hover:underline">
+              Se connecter
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -8,6 +8,10 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    // 🎯 AJOUT : Configuration pour autoriser la communication entre fenêtres
+    headers: {
+      'Cross-Origin-Opener-Policy': 'unsafe-none',
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

@@ -1,11 +1,13 @@
 # backend/apps/users/urls.py
-
+from . import views
 from django.urls import path
 from .views import ( 
     UserRegisterView,
     UserDetailView,
     AvatarUploadView,
-    # Ajoutez d'autres vues de l'application 'users' ici si nécessaire
+    LogoutView,  
+    GoogleLogin, 
+  
 )
 
 # Définit le namespace pour les reverses (ex: reverse('users:user-register'))
@@ -21,6 +23,9 @@ urlpatterns = [
     # 3. Téléchargement et mise à jour de l'avatar
     path("me/avatar/", AvatarUploadView.as_view(), name="avatar-upload"),
     
-    # Note: Le Login (token_obtain_pair), le Refresh et le Blacklist (Logout)
-    # sont gérés directement dans le fichier d'URLs principal par simplejwt.
+    # 4. Déconnexion
+    path("logout/", LogoutView.as_view(), name="user-logout"),
+    
+    # 5. Authentification Google
+    path("google/", GoogleLogin.as_view(), name="google_login"),
 ]

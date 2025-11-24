@@ -1,5 +1,9 @@
-import { Crown } from 'lucide-react';
+import { useState } from 'react';
+import { Crown, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { downloadPDF, type TemplateType } from '@/lib/pdf-generator';
+import { TemplateSelector } from './TemplateSelector';
 import type { CV } from '@/types/api.types';
 
 interface CVPreviewProps {
@@ -9,6 +13,30 @@ interface CVPreviewProps {
 }
 
 export const CVPreview = ({ cv, isPremium, onUpgradeToPremium }: CVPreviewProps) => {
+  const { toast } = useToast();
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('modern');
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!cv || !isPremium) return;
+
+    setIsDownloading(true);
+    try {
+      await downloadPDF(cv, selectedTemplate);
+      toast({
+        title: 'Téléchargement réussi',
+        description: 'Votre CV a été téléchargé avec succès',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de télécharger le PDF',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
   return (
     <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
@@ -112,12 +140,23 @@ export const CVPreview = ({ cv, isPremium, onUpgradeToPremium }: CVPreviewProps)
         )}
       </div>
 
+      {isPremium && (
+        <div className="mt-4 space-y-4 border-t border-border pt-4">
+          <TemplateSelector
+            selectedTemplate={selectedTemplate}
+            onTemplateChange={setSelectedTemplate}
+          />
+        </div>
+      )}
+
       <div className="mt-4">
         <Button
-          className="w-full"
-          disabled={!isPremium}
+          className="w-full gap-2"
+          disabled={!isPremium || isDownloading}
+          onClick={handleDownload}
         >
-          Télécharger PDF
+          <Download className="h-4 w-4" />
+          {isDownloading ? 'Téléchargement...' : 'Télécharger PDF'}
         </Button>
         {!isPremium && (
           <p className="mt-2 text-center text-xs text-muted-foreground">
