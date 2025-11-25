@@ -22,7 +22,7 @@ router = DefaultRouter()
 
 # 1. Vue principale du document CV
 # Endpoints générés : /cvs/ (LIST & CREATE) et /cvs/{pk}/ (RETRIEVE, UPDATE, DESTROY)
-router.register(r'cvs', CVViewSet, basename='cv')
+router.register(r'', CVViewSet, basename='cv')
 
 # 2. Vues des sections (chacune a son propre endpoint CRUD indépendant)
 # Ces chemins sont préférables aux chemins imbriqués (ex: cvs/1/experiences/) pour la simplicité.
