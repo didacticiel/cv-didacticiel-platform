@@ -8,13 +8,11 @@ from django.contrib.auth import get_user_model
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.utils.translation import gettext_lazy as _
-
-# Import pour l'authentification sociale
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-from allauth.socialaccount.helpers import complete_social_login
-from dj_rest_auth.registration.views import SocialLoginView
 from django.conf import settings
+
+# Importations spécifiques à l'Auth Google (méthode ID Token)
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 
 from .serializers import (
     UserRegisterSerializer, 
@@ -24,6 +22,7 @@ from .serializers import (
 
 User = get_user_model()
 
+
 # =========================================================================
 # 1. AUTHENTIFICATION DE BASE (Basée sur Simple JWT)
 # =========================================================================
@@ -31,24 +30,21 @@ User = get_user_model()
 class UserRegisterView(generics.CreateAPIView):
     """
     Endpoint POST /api/v1/users/register/
-    Permet l'enregistrement d'un nouvel utilisateur.
+    Permet l'enregistrement d'un nouvel utilisateur (email/password).
     """
     queryset = User.objects.all()
-    # 🎯 CORRECTION : Utilisation du bon sérialiseur
     serializer_class = UserRegisterSerializer
-    permission_classes = [permissions.AllowAny]  # Ouvert à tous
+    permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
-        # Utilise le sérialiseur pour créer l'utilisateur
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         
-        # Après la création, nous obtenons immédiatement les tokens JWT pour l'utilisateur
+        # Génère les tokens JWT immédiatement après l'inscription (Auto-login)
         user = serializer.instance
         refresh = RefreshToken.for_user(user)
         
-        # Le frontend peut maintenant se connecter automatiquement après l'enregistrement
         return Response(
             {
                 "message": _("Compte créé avec succès. Vous êtes maintenant connecté."), 
@@ -59,6 +55,7 @@ class UserRegisterView(generics.CreateAPIView):
             status=status.HTTP_201_CREATED, 
         )
 
+
 # =========================================================================
 # 2. GESTION DU PROFIL (L'utilisateur connecté)
 # =========================================================================
@@ -66,14 +63,14 @@ class UserRegisterView(generics.CreateAPIView):
 class UserDetailView(generics.RetrieveUpdateAPIView):
     """
     Endpoint GET/PUT /api/v1/users/me/
-    Permet de visualiser les détails de l'utilisateur connecté et de mettre à jour son profil.
+    Permet de visualiser et mettre à jour le profil de l'utilisateur connecté.
     """
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]  # Nécessite le token JWT
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
-        # Retourne l'objet utilisateur de la requête authentifiée (request.user)
         return self.request.user
+
 
 # =========================================================================
 # 3. LOGOUT (Blacklisting du Refresh Token)
@@ -82,14 +79,12 @@ class UserDetailView(generics.RetrieveUpdateAPIView):
 class LogoutView(APIView):
     """
     Endpoint POST /api/v1/users/logout/
-    Ajoute le Refresh Token à la liste noire (Blacklist) pour invalider toutes les sessions.
-    Nécessite le token JWT.
+    Invalide la session en blacklistant le Refresh Token.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         try:
-            # Le Refresh Token est envoyé dans le corps de la requête
             refresh_token = request.data.get("refresh")
             if refresh_token:
                 token = RefreshToken(refresh_token)
@@ -100,12 +95,12 @@ class LogoutView(APIView):
                     {"detail": _("Token de rafraîchissement manquant.")}, 
                     status=status.HTTP_400_BAD_REQUEST
                 )
-        except Exception as e:
-            # Si le token est déjà blacklisté ou invalide
+        except Exception:
             return Response(
-                {"detail": _("Token de rafraîchissement invalide.")}, 
+                {"detail": _("Token de rafraîchissement invalide ou déjà utilisé.")}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
+
 
 # =========================================================================
 # 4. GESTION DES FICHIERS (Avatar)
@@ -116,21 +111,18 @@ class AvatarUploadView(APIView):
     Endpoint PATCH /api/v1/users/me/avatar/
     Permet de télécharger l'avatar de l'utilisateur.
     """
-    # Permet de parser les requêtes contenant des fichiers (multipart/form-data)
     parser_classes = [MultiPartParser, FormParser]  
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
         user = request.user
         
-        # Le fichier est dans request.FILES pour MultiPartParser
         if 'avatar' not in request.FILES:
             return Response(
                 {"avatar": _("Veuillez fournir un fichier d'image.")}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        # Nous n'utilisons qu'une partie des champs (l'avatar)
         serializer = UserAvatarSerializer(
             user, 
             data={'avatar': request.FILES['avatar']}, 
@@ -139,27 +131,117 @@ class AvatarUploadView(APIView):
             
         if serializer.is_valid():
             serializer.save()
-            # Retourne les données utilisateur mises à jour
             return Response(UserSerializer(user).data) 
             
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# =========================================================================
-# 5. AUTHENTIFICATION GOOGLE
-# =========================================================================
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-from allauth.socialaccount.providers.oauth2.client import OAuth2Client
-# 
-# Import de la vue standard de dj-rest-auth
-from dj_rest_auth.registration.views import SocialLoginView
-from .custom_adapter import CustomGoogleOAuth2Adapter
 
-class GoogleLogin(SocialLoginView):
+# =========================================================================
+# 5. AUTHENTIFICATION GOOGLE (MÉTHODE ID TOKEN)
+# =========================================================================
+
+@api_view(["POST"])
+@permission_classes([permissions.AllowAny])
+def google_auth(request):
     """
-    Endpoint pour gérer l'échange du code Google (code) contre les tokens JWT.
-    Le client envoie le 'code' et le 'state'.
-    dj-rest-auth gère toute la logique OAuth2 interne et la connexion.
+    Endpoint POST /api/v1/users/google-auth/
+    Traite le jeton d'identification (ID Token) envoyé par le frontend (Google SDK).
     """
-    # 🎯 Utilise votre adaptateur personnalisé pour la gestion du callback_url
-    adapter_class = CustomGoogleOAuth2Adapter 
-    client_class = OAuth2Client
+    # ✅ AJOUT : Log pour débugger
+    print("=" * 80)
+    print("📦 Données reçues dans request.data:", request.data)
+    print("=" * 80)
+    
+    # ✅ CORRECTION : Récupérer "id_token" (avec underscore)
+    id_token_str = request.data.get("id_token")
+    
+    if not id_token_str:
+        print("❌ Erreur: id_token manquant dans request.data")
+        return Response(
+            {"error": "ID Token non fourni", "status": False}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        print(f"🔵 Vérification de l'ID Token: {id_token_str[:50]}...")
+        
+        # 1. Vérification du jeton avec l'ID client
+        id_info = id_token.verify_oauth2_token(
+            id_token_str, 
+            google_requests.Request(), 
+            settings.GOOGLE_OAUTH_CLIENT_ID
+        )
+
+        print(f"✅ ID Token vérifié. Infos reçues: {id_info}")
+
+        # 2. Extraction des informations utilisateur
+        email = id_info.get('email')
+        first_name = id_info.get('given_name', '')
+        last_name = id_info.get('family_name', '')
+        
+        if not email:
+            print("❌ Erreur: Email non trouvé dans le token")
+            return Response(
+                {"error": "Email non trouvé dans le token Google", "status": False},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        print(f"📧 Email extrait: {email}")
+        
+        # 3. Récupération ou création de l'utilisateur
+        user, created = User.objects.get_or_create(email=email)
+        
+        if created:
+            print(f"✨ Nouvel utilisateur créé: {email}")
+            # CAS N°1 : NOUVEL UTILISATEUR (Inscription Google)
+            user.username = email  # Assurer l'unicité du champ username
+            user.set_unusable_password() 
+            user.first_name = first_name
+            user.last_name = last_name
+            user.registration_method = 'google'
+            user.is_active = True
+            user.save()
+        else:
+            print(f"👤 Utilisateur existant: {email}")
+            # CAS N°2 : UTILISATEUR EXISTANT
+            if user.registration_method != 'google':
+                print(f"⚠️ Conflit: Utilisateur enregistré avec mot de passe")
+                return Response({
+                    "error": "Ce compte existe déjà avec un mot de passe. Veuillez vous connecter avec votre email.",
+                    "status": False
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            if not user.is_active:
+                user.is_active = True
+                user.save()
+
+        # 4. Génération des tokens JWT
+        refresh = RefreshToken.for_user(user)
+        
+        print(f"🎟️ Tokens JWT générés pour {email}")
+        print("=" * 80)
+        
+        # ✅ CORRECTION : Retourner la structure attendue par le frontend
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
+            status=status.HTTP_200_OK
+        )
+
+    except ValueError as e:
+        # Token invalide, expiré ou mauvais Client ID
+        print(f"❌ ValueError: {str(e)}")
+        return Response(
+            {"error": f"Token Google invalide: {str(e)}", "status": False}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        print(f"❌ Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {"error": f"Erreur serveur: {str(e)}", "status": False}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

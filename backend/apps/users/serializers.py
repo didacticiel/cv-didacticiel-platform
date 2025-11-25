@@ -3,108 +3,23 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
-
-User = get_user_model()
-
-
-class UserRegisterSerializer(serializers.ModelSerializer):
-    """
-    Sérialiseur pour l'inscription d'un nouvel utilisateur.
-    """
-    password = serializers.CharField(
-        write_only=True, 
-        required=True,
-        style={'input_type': 'password'}
-    )
-    password2 = serializers.CharField(
-        write_only=True, 
-        required=True,
-        style={'input_type': 'password'},
-        label='Confirmation du mot de passe'
-    )
-
-    class Meta:
-        model = User
-        fields = ['email', 'first_name', 'last_name', 'password', 'password2']
-        extra_kwargs = {
-            'first_name': {'required': True},
-            'last_name': {'required': True},
-        }
-
-    def validate(self, data):
-        """
-        Vérifie que les deux mots de passe correspondent et respectent les règles de sécurité.
-        """
-        # Vérifier que les deux mots de passe correspondent
-        if data['password'] != data['password2']:
-            raise serializers.ValidationError({
-                'password2': 'Les mots de passe ne correspondent pas.'
-            })
-        
-        # 🎯 CORRECTION : Ne pas passer password2 au modèle User
-        # On crée une copie temporaire sans password2 pour la validation
-        user_data = {
-            'email': data.get('email'),
-            'first_name': data.get('first_name'),
-            'last_name': data.get('last_name'),
-        }
-        
-        # Valider le mot de passe selon les règles Django
-        try:
-            validate_password(data['password'], user=User(**user_data))
-        except ValidationError as e:
-            raise serializers.ValidationError({'password': list(e.messages)})
-        
-        return data
-
-    def create(self, validated_data):
-        """
-        Crée un nouvel utilisateur avec le mot de passe hashé.
-        """
-        # 🎯 CORRECTION : Retirer password2 avant de créer l'utilisateur
-        validated_data.pop('password2')
-        
-        # Créer l'utilisateur avec create_user qui gère automatiquement le hashing
-        user = User.objects.create_user(
-            email=validated_data['email'],
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            password=validated_data['password']
-        )
-        
-        return user
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """
-    Sérialiseur pour afficher et mettre à jour les informations d'un utilisateur.
-    """
-    class Meta:
-        model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'avatar', 'created_at']
-        read_only_fields = ['id', 'email', 'created_at']
-
-
-
-#apps/users/serializers.py
-
-from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from django.contrib.auth.password_validation import validate_password
 from django.core import exceptions as django_exceptions
 from django.utils.translation import gettext_lazy as _
 
 User = get_user_model()
 
+# Logique : Nous avons retiré les importations inutilisées de dj_rest_auth/allauth car nous utilisons la méthode ID Token.
+
+
 # =========================================================================
 # 1. ENREGISTREMENT (REGISTER)
+# Logique : Utilisé pour l'inscription classique (email et mot de passe).
 # =========================================================================
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    """Sérialiseur pour la création d'un nouvel utilisateur."""
+    """Sérialiseur pour la création d'un nouvel utilisateur (inscription classique)."""
     
-    # Champ write_only pour la sécurité lors de l'enregistrement
+    # Logique : Champs en 'write_only' pour ne jamais exposer les mots de passe lors de la lecture.
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     password2 = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
 
@@ -118,6 +33,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             'password', 
             'password2'
         )
+        # Logique : Assure que le prénom, nom et nom d'utilisateur sont toujours fournis.
         extra_kwargs = {
             'username': {'required': True},
             'first_name': {'required': True},
@@ -125,12 +41,13 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, data):
-        # Validation de la correspondance des mots de passe
+        # Logique : Étape 1 - Vérification de la correspondance des mots de passe.
         if data['password'] != data['password2']:
             raise serializers.ValidationError({"password2": _("Les mots de passe ne correspondent pas.")})
 
-        # 🎯 CORRECTION: Créer un dictionnaire de données pour l'utilisateur SANS 'password2' ni 'password'
-        # Le modèle User n'a pas de champ 'password2' et le mot de passe n'est pas nécessaire pour instancier l'objet temporaire
+        # Logique : Étape 2 - Préparation des données pour la validation du mot de passe.
+        # Nous créons une instance temporaire de User SANS mot de passe pour vérifier 
+        # la complexité en fonction des règles de validation de Django (ex: ne pas utiliser le nom ou l'email).
         user_data_for_validation = {
             'email': data.get('email'),
             'username': data.get('username'),
@@ -138,45 +55,49 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             'last_name': data.get('last_name'),
         }
 
-        # Validation de la complexité du mot de passe
+        # Logique : Étape 3 - Validation de la complexité du mot de passe via les règles de settings.py.
         try:
-            # Passez le mot de passe et l'instance temporaire SANS password2
             validate_password(data['password'], user=User(**user_data_for_validation))
         except django_exceptions.ValidationError as e:
+            # Si la validation échoue, renvoie les messages d'erreur de Django.
             raise serializers.ValidationError({"password": list(e.messages)})
             
         return data
 
     def create(self, validated_data):
-        # Cette partie est déjà correcte (elle pop 'password2')
+        # Logique : Retire le champ 'password2' qui n'est pas un champ de modèle.
         validated_data.pop('password2')
-        # Création de l'utilisateur avec son mot de passe haché
+        
+        # Logique : Utilise la méthode create_user pour hacher correctement le mot de passe.
         user = User.objects.create_user(
             email=validated_data['email'],
             username=validated_data['username'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
             password=validated_data['password']
+            # Note : Le champ registration_method restera à 'email' (sa valeur par défaut).
         )
         return user
 
 # =========================================================================
 # 2. CONNEXION (LOGIN - basé sur email/password)
+# Logique : Champ simple pour la connexion, les vues JWT utilisent généralement ces champs implicitement.
 # =========================================================================
 
 class LoginSerializer(serializers.Serializer):
-    """Sérialiseur pour la connexion (méthode non utilisée directement par JWT, mais utile)."""
+    """Sérialiseur pour la connexion (email/password)."""
     email = serializers.EmailField(required=True)
     password = serializers.CharField(required=True, write_only=True, style={'input_type': 'password'})
 
 # =========================================================================
 # 3. DÉTAILS DU PROFIL (GET/UPDATE /users/me/)
+# Logique : Permet de lire et mettre à jour les informations du profil.
 # =========================================================================
 
 class UserSerializer(serializers.ModelSerializer):
     """Sérialiseur pour la lecture et la mise à jour du profil utilisateur."""
     
-    # Ajout du champ 'avatar' pour la lecture et la mise à jour
+    # Logique : 'source='avatar'' mappe le champ de fichier à une URL lisible, 'read_only' car il n'est pas uploadé via ce champ.
     avatar_url = serializers.ImageField(source='avatar', read_only=True)
     
     class Meta:
@@ -188,25 +109,23 @@ class UserSerializer(serializers.ModelSerializer):
             'first_name', 
             'last_name', 
             'is_premium_subscriber', 
-            'avatar_url', # Le chemin complet de l'image
+            'avatar_url', 
             'is_staff', 
             'date_joined'
         )
+        # Logique : Ces champs ne peuvent pas être modifiés par l'utilisateur via cette API.
         read_only_fields = ('id', 'email', 'is_premium_subscriber', 'is_staff', 'date_joined')
         
 # =========================================================================
 # 4. TÉLÉCHARGEMENT D'AVATAR (PATCH /users/me/avatar/)
+# Logique : Sérialiseur dédié pour ne gérer que le téléchargement d'image.
 # =========================================================================
 
 class UserAvatarSerializer(serializers.ModelSerializer):
     """Sérialiseur pour la mise à jour du champ avatar uniquement."""
     class Meta:
         model = User
-        fields = ('avatar',)        
-class UserAvatarSerializer(serializers.ModelSerializer):
-    """
-    Sérialiseur pour la mise à jour de l'avatar uniquement.
-    """
-    class Meta:
-        model = User
-        fields = ['avatar']
+        fields = ('avatar',) 
+
+# Note : La classe CustomSocialLoginSerializer a été retirée car nous utilisons la méthode ID Token/Simple JWT, 
+# qui ne nécessite pas les bibliothèques dj-rest-auth ou django-allauth.

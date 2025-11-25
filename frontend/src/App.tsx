@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -19,30 +21,33 @@ import ExperienceStep from "./pages/onboarding/ExperienceStep";
 import EducationStep from "./pages/onboarding/EducationStep";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
-// 🎯 AJOUT : Importer la nouvelle page de callback pour l'authentification sociale
-import AuthCallback from "./pages/AuthCallback";
+// 🗑️ SUPPRIMÉ : L'importation de AuthCallback n'est plus nécessaire.
+// import AuthCallback from "./pages/AuthCallback"; 
 
 const queryClient = new QueryClient();
 
 const AppContent = () => {
   const { setUser, setIsLoading } = useAuthStore();
 
+  // 💡 Logique : Initialisation de l'état d'authentification au chargement de l'application.
+  // Elle vérifie si des tokens existent et tente de récupérer les informations utilisateur.
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('access_token');
       if (token) {
         try {
+          // Tente de récupérer l'utilisateur, validant par la même occasion le token
           const user = await authService.getCurrentUser();
           setUser(user);
         } catch (error) {
-          // Si le token est invalide, on le supprime et on déconnecte l'utilisateur
+          // En cas d'échec (token expiré ou invalide), on nettoie les tokens
           console.error("Failed to get current user:", error);
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
           setUser(null);
         }
       }
-      // Dans tous les cas, on arrête le chargement initial
+      // Indique que l'état initial de chargement (splash screen potentiel) est terminé
       setIsLoading(false);
     };
 
@@ -56,12 +61,11 @@ const AppContent = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/login" element={<Login />} />
       
-      {/* 🎯 AJOUT : Route pour le callback de l'authentification sociale */}
-      {/* Cette route doit être accessible sans authentification. 
-          Elle est utilisée par la popup de Google pour finaliser la connexion. */}
-      <Route path="/auth/social/callback" element={<AuthCallback />} />
+      {/* 🗑️ SUPPRIMÉ : La route de callback sociale n'est plus utilisée. */}
+      {/* <Route path="/auth/social/callback" element={<AuthCallback />} /> */}
       
       {/* --- Pages protégées (nécessitent une authentification) --- */}
+      {/* 💡 Logique : Le composant ProtectedRoute vérifie l'état isAuth avant de rendre le composant enfant. */}
       <Route path="/onboarding/document" element={
         <ProtectedRoute>
           <DocumentStep />
@@ -101,6 +105,7 @@ const AppContent = () => {
 };
 
 const App = () => (
+  // 💡 Logique : Configuration des fournisseurs de contexte globaux (Queries, Toasts, Routing)
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />

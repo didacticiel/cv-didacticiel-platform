@@ -1,4 +1,5 @@
 # settings/base.py
+
 import sys
 import os
 from pathlib import Path
@@ -6,41 +7,46 @@ from datetime import timedelta
 import environ
 from django.contrib import admin
 
+# =========================================================================
+# 1. CHEMINS & ENVIRONNEMENT
+# =========================================================================
 
-# Build paths
+# Logique : Définit le répertoire de base du projet.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 APPS_DIR = BASE_DIR / "apps"
-TEMPLATE_DIR =  os.path.join(BASE_DIR, "templates")
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 
-# Environment variables
+# Logique : Initialisation de django-environ pour gérer les variables d'environnement.
 env = environ.Env(
     DEBUG=(bool, False),
     USE_TZ=(bool, True),
-    # Définition du domaine backend avec valeur par défaut pour dev
     BACKEND_DOMAIN=(str, 'http://localhost:8000'),
-    # 🎯 AJOUT : Variables pour l'authentification Google
-    GOOGLE_CLIENT_ID=(str, 'VOTRE_CLIENT_ID_GOOGLE_DEV'),
-    GOOGLE_SECRET=(str, 'VOTRE_SECRET_GOOGLE_DEV'),
-    # 💡 AJOUT : Assurer que FRONTEND_URL est bien initialisé
+    
+    # 💡 Configuration Google pour la méthode ID Token (utilisée dans views.py)
+    GOOGLE_OAUTH_CLIENT_ID=(str, 'VOTRE_CLIENT_ID_GOOGLE_DEV'),
+    GOOGLE_OAUTH_CLIENT_SECRET=(str, 'VOTRE_SECRET_GOOGLE_DEV'),
+    
     FRONTEND_URL=(str, 'http://localhost:8080'), 
 )
 
-# Take environment variables from .env file if it exists
+# Lecture du fichier .env
 environ.Env.read_env(BASE_DIR / '.env')
 
-# --- Nouvelle variable : Domaine Backend ---
-# Récupère le domaine de base pour la construction des URLs (prod ou dev)
-BACKEND_DOMAIN = env('BACKEND_DOMAIN') 
-
-# SECURITY WARNING: keep the secret key used in production secret!
+# --- Variables de Sécurité & Base ---
 SECRET_KEY = env('SECRET_KEY')
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
-
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
-# Application definition
+# 💡 Variables d'environnement pour l'accès aux services externes
+GOOGLE_OAUTH_CLIENT_ID = env('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_OAUTH_CLIENT_SECRET = env('GOOGLE_OAUTH_CLIENT_SECRET')
+FRONTEND_URL = env('FRONTEND_URL')
+BACKEND_DOMAIN = env('BACKEND_DOMAIN') 
+
+# =========================================================================
+# 2. APPLICATIONS
+# =========================================================================
+
 DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -53,44 +59,30 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
-    # REST Framework
+    # REST Framework & JWT
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     
-    # CORS pour un futur frontend
+    # Outils
     'corsheaders',
-    
-    # Filtres avancés
     'django_filters',
-    
-    # Documentation API
     'drf_spectacular',
     
-    # Authentification
+    # Authentification (Nous gardons le minimum pour les fonctionnalités email)
     'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google', 
+    'allauth.account', 
     'dj_rest_auth',
     'dj_rest_auth.registration',
     
-    # Gestion des images (avatars, photos de travaux)
+    # Utilitaires
     'easy_thumbnails',
-
-    
-    # Cache
     'django_redis',
-    
-    # Monitoring
     'django_extensions',
-    
-    # Internationalisation
     'rosetta',
 ]
 
-# MODIFIE POUR CV DIDACTICIEL: Nos applications spécifiques
 LOCAL_APPS = [
     'apps.cv_app',
     'apps.users',      
@@ -99,8 +91,12 @@ LOCAL_APPS = [
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
-# 💡 CORRECTION : Assurez-vous que le chemin est correct si l'application 'users' est dans 'apps'
+# Logique : Indique à Django quel modèle utiliser pour l'authentification.
 AUTH_USER_MODEL = 'users.User' 
+
+# =========================================================================
+# 3. MIDDLEWARE & URLS
+# =========================================================================
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -110,13 +106,11 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'allauth.account.middleware.AccountMiddleware', 
+    'allauth.account.middleware.AccountMiddleware', # Conservé/retiré selon besoin d'allauth pour session.
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.locale.LocaleMiddleware',
 ]
-
-# Note: ROOT_URLCONF doit être corrigé pour correspondre à votre nom de projet
 
 ROOT_URLCONF = 'CvDidacticiel_API.urls'
 
@@ -142,6 +136,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'CvDidacticiel_API.wsgi.application'
 
+
+# =========================================================================
+# 4. BASE DE DONNÉES & CACHE
+# =========================================================================
+
 # Database
 DATABASES = {
     'default': {
@@ -149,7 +148,6 @@ DATABASES = {
         'NAME': env('DATABASE_NAME'),
         'USER': env('DATABASE_USER'),
         'PASSWORD': env('DATABASE_PASSWORD'),
-        # Pour Docker Compose, HOST doit être 'db'
         'HOST': env('DATABASE_HOST', default='localhost'), 
         'PORT': env('DATABASE_PORT', default='5432'),
         'ATOMIC_REQUESTS': True,
@@ -179,18 +177,21 @@ SESSION_CACHE_ALIAS = 'default'
 SESSION_COOKIE_AGE = 1209600  # 2 weeks
 SESSION_COOKIE_SAMESITE = 'None' 
 SESSION_COOKIE_SECURE = False 
-# 🎯 AJOUT : Désactiver la politique Cross-Origin-Opener pour le développement (pour la popup Social Login)
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
 
-# 🎯 MODIFICATION CRITIQUE : Ajout du backend d'authentification allauth
+# =========================================================================
+# 5. AUTHENTIFICATION DJANGO
+# =========================================================================
+
+# Logique : Permet la connexion par ModelBackend (mot de passe) et AuthenticationBackend (allauth).
 AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',  
-    'guardian.backends.ObjectPermissionBackend',
+    # 'guardian.backends.ObjectPermissionBackend', # Si utilisé
 )
 ANONYMOUS_USER_NAME = None
 
-# Password validation (inchangé)
+# Password validation 
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -209,7 +210,11 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Internationalization (inchangé)
+# =========================================================================
+# 6. INTERNATIONALISATION & FICHIERS
+# =========================================================================
+
+# Internationalization 
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = "Africa/Porto-Novo"
 USE_I18N = True
@@ -246,79 +251,46 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Site framework
+# =========================================================================
+# 7. CONFIGURATION REST FRAMEWORK & JWT
+# =========================================================================
+
+# Site framework (requis par allauth)
 SITE_ID = 1
 
-# 🎯 MODIFICATION CRITIQUE : Configuration pour dj-rest-auth avec support JWT
-# 💡 IMPORTANT : Utilisation de env('FRONTEND_URL') pour la redirection.
+# 🎯 Configuration dj-rest-auth nettoyée.
 REST_AUTH = {
     'USE_JWT': True,
     'JWT_AUTH_HTTPONLY': False,
     'SESSION_LOGIN': False,
     'USER_DETAILS_SERIALIZER': 'apps.users.serializers.UserSerializer',
+    # Logique : Retrait des configurations sociales obsolètes (SOCIAL_LOGIN_SERIALIZER, etc.)
     'JWT_AUTH_COOKIE': 'cv_didacticiel_jwt',
     'JWT_AUTH_REFRESH_COOKIE': 'cv_didacticiel_jwt_refresh',
-    'SOCIAL_AUTH_TOKEN_STRATEGY': 'jwt',
-    # 💡 Utilise l'URL du frontend lue par env()
-    'SOCIAL_AUTH_REDIRECT_URI': f'{env("FRONTEND_URL")}/auth/social/callback', 
     
-    # Nouvelle configuration pour les champs d'inscription
     'REGISTER_SERIALIZER': 'dj_rest_auth.registration.serializers.RegisterSerializer',
     'REGISTER_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
 }
 
-# 🎯 URL du frontend (celle qui apparaît dans Google Console)
-FRONTEND_URL = env('FRONTEND_URL') 
-# Redirection après succès (Utilise l'URL du frontend pour le social login)
-LOGIN_REDIRECT_URL = f'{FRONTEND_URL}/auth/social/callback/'
-ACCOUNT_LOGOUT_REDIRECT_URL = '/'
-
-# Désactivez l'e-mail de confirmation si vous voulez une connexion instantanée
+# Logique : Configuration allauth pour la gestion de l'email/mot de passe.
 ACCOUNT_EMAIL_VERIFICATION = 'none' 
-
-# Permet de se connecter avec l'email (si c'est votre USERNAME_FIELD)
-
-# Nouvelle configuration (recommandée)
-ACCOUNT_LOGIN_METHODS = {'email'}  
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*'] 
-# 🎯 Configuration allauth
-ACCOUNT_AUTHENTICATION_METHOD = 'email'
-ACCOUNT_EMAIL_REQUIRED = True
+#ACCOUNT_AUTHENTICATION_METHOD = 'email'
+#ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_USERNAME_REQUIRED = False
+#ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 
-# 🎯 Pour éviter les problèmes de redirection
+# Pour éviter les problèmes de redirection/gestion de compte
+ACCOUNT_LOGIN_METHODS = {'email'}  
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*'] 
 SOCIALACCOUNT_AUTO_SIGNUP = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'none'
-# 🎯 Adaptateur personnalisé
-SOCIALACCOUNT_ADAPTER = 'apps.users.custom_adapter.CustomSocialAccountAdapter'
-# 🎯 MODIFICATION CRITIQUE : Configuration pour les providers sociaux
-SOCIALACCOUNT_LOGIN_ON_GET = False  # Changez à False pour plus de sécurité
+SOCIALACCOUNT_LOGIN_ON_GET = False 
+
+# La configuration SOCIALACCOUNT_PROVIDERS est entièrement retirée.
 
 
-
-# Configuration allauth pour Google
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'APP': {
-            # 💡 Lit de la variable d'environnement (sans VITE_)
-            'client_id': env('GOOGLE_CLIENT_ID'), 
-            'secret': env('GOOGLE_SECRET'),
-            'key': ''  
-        },
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'offline',  # Pour obtenir un refresh token
-        },
-        'VERIFIED_EMAIL': True,
-    }
-}
-
-# Django REST Framework (inchangé)
+# Django REST Framework 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',  
@@ -349,7 +321,7 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# SIMPLE JWT configuration (SimpleJWT officiel)
+# SIMPLE JWT configuration
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -366,16 +338,12 @@ SIMPLE_JWT = {
 # Cookies JWT HttpOnly
 JWT_COOKIE_NAME = "cv_didacticiel_jwt"
 JWT_REFRESH_COOKIE_NAME = "cv_didacticiel_jwt_refresh"
-# JWT_COOKIE_SECURE doit être True en production HTTPS
 JWT_COOKIE_SECURE = env.bool('JWT_COOKIE_SECURE', default=False) 
 JWT_COOKIE_SAMESITE = "Lax"    
 JWT_COOKIE_HTTPONLY = True
 
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
-
-# CORS settings pour React
-# On utilise la logique conditionnelle ci-dessous
 
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
@@ -400,7 +368,7 @@ CORS_ALLOWED_HEADERS = [
     'x-requested-with',
 ]
 
-# MODIFIE POUR CV DIDACTICIEL: Documentation API (inchangé)
+# MODIFIE POUR CV DIDACTICIEL: Documentation API 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'CV Didacticiel Platform API',
     'DESCRIPTION': 'API complète pour la plateforme de mise de création de cv en ligne, proffessionel, compatible et recommander.',
@@ -416,11 +384,11 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-# CKEditor Configuration (inchangé)
+# CKEditor Configuration
 CKEDITOR_UPLOAD_PATH = "uploads/"
 CKEDITOR_IMAGE_BACKEND = "pillow"
 
-# Email configuration (inchangé)
+# Email configuration
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = env('EMAIL_HOST', default='localhost')
 EMAIL_PORT = env.int('EMAIL_PORT', default=587)
@@ -429,14 +397,14 @@ EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@cvdidacticiel.bj')
 
-# Logging (inchangé)
+# Logging 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     # ... (handlers et loggers)
 }
 
-# Celery Configuration (inchangé)
+# Celery Configuration
 CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
@@ -444,7 +412,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
-# Configuration des thumbnails (inchangé)
+# Configuration des thumbnails 
 THUMBNAIL_ALIASES = {
     '': {
         'profile_pic_small': {'size': (50, 50), 'crop': True},
@@ -454,7 +422,7 @@ THUMBNAIL_ALIASES = {
     },
 }
 
-# Security settings (inchangé)
+# Security settings 
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
@@ -462,7 +430,7 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
-# MODIFIE POUR CV DIDACTICIEL: Settings spécifiques à l'application (inchangé)
+# MODIFIE POUR CV DIDACTICIEL: Settings spécifiques à l'application 
 APP_SETTINGS = {
     'MAX_CV_DESCRIPTION_LENGTH': 5000,
     'MAX_CV_PER_USER': 10,
@@ -471,7 +439,7 @@ APP_SETTINGS = {
     'PRICE_CV_DOWNLOAD': env.int('PRICE_CV_DOWNLOAD', default=2500) 
 }
 
-# MODIFIE POUR CV DIDACTICIEL: Rate limiting spécifique (inchangé)
+# MODIFIE POUR CV DIDACTICIEL: Rate limiting spécifique 
 API_RATE_LIMITS = {
     'cv_creation': '5/hour',
     'user_registration': '3/hour',
@@ -479,24 +447,19 @@ API_RATE_LIMITS = {
     'profile_update': '20/hour',
 }
 
-# MODIFIE POUR CV DIDACTICIEL: Feature flags (inchangé)
+# MODIFIE POUR CV DIDACTICIEL: Feature flags 
 FEATURE_FLAGS = {
     'GENERATION_AI': env.bool('FEATURE_GENERATION_AI', default=True),
 }
 
-# File storage (pour production avec AWS S3) (inchangé)
+# File storage (pour production avec AWS S3) 
 if env.bool('USE_S3', default=False):
     # ... (configuration S3)
     pass
 
-# Settings de développement spécifiques (inchangé)
+# Settings de développement spécifiques 
 if DEBUG:
     # Django Debug Toolbar
     INSTALLED_APPS += ['debug_toolbar']
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware']
     INTERNAL_IPS = ['127.0.0.1']
-
-# --- Personnalisation de l'Admin Django --- (inchangé)
-ADMIN_SITE_TITLE = "API CvDidacticiel"
-ADMIN_SITE_HEADER = "Administration de l'API CvDidacticiel"
-ADMIN_SITE_INDEX_TITLE = "Tableau de Bord Administratif"
